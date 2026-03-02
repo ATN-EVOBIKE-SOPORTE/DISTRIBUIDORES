@@ -1,0 +1,340 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>EvoBike Pro | Sistema de Cotización y Negocios</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.5.28/jspdf.plugin.autotable.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+    <style>
+        :root { --evogreen: #22c55e; --evodark: #0f172a; --evolight: #f8fafc; }
+        body { font-family: 'Segoe UI', sans-serif; background: var(--evolight); margin: 0; padding: 15px; color: #333; }
+        .ui-container { max-width: 500px; margin: auto; background: white; padding: 25px; border-radius: 20px; box-shadow: 0 10px 25px rgba(0,0,0,0.05); border: 1px solid #e2e8f0; }
+        label { display: block; font-size: 10px; font-weight: 800; margin: 12px 0 4px; color: #64748b; text-transform: uppercase; letter-spacing: 0.5px; }
+        input, select { width: 100%; padding: 12px; margin-bottom: 8px; border: 1px solid #e2e8f0; border-radius: 10px; box-sizing: border-box; background: #fdfdfd; }
+        .lvl-btns { display: flex; gap: 8px; margin-bottom: 15px; }
+        .lvl-btn { flex: 1; padding: 12px; font-size: 10px; border: 1px solid #e2e8f0; cursor: pointer; background: white; border-radius: 10px; text-align: center; font-weight: bold; transition: 0.3s; }
+        .lvl-btn.active { background: var(--evogreen); color: white; border-color: var(--evogreen); box-shadow: 0 4px 12px rgba(34, 197, 94, 0.3); }
+        .add-box { background: #f8fafc; padding: 18px; border-radius: 15px; border: 1px solid #edf2f7; margin-bottom: 20px; }
+        .btn-add { background: var(--evogreen); color: white; border: none; width: 100%; padding: 14px; border-radius: 10px; font-weight: bold; cursor: pointer; text-transform: uppercase; font-size: 12px; }
+        .cart-table { width: 100%; margin-top: 15px; border-collapse: collapse; font-size: 11px; }
+        .cart-table tr { border-bottom: 1px solid #f1f5f9; }
+        .cart-table td { padding: 8px 4px; }
+        .btn-del { color: #ef4444; background: none; border: none; font-weight: bold; cursor: pointer; font-size: 18px; }
+        .profit-panel { margin-top: 20px; padding: 20px; background: var(--evodark); color: white; border-radius: 15px; }
+        .profit-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 15px; }
+        .profit-val { font-size: 18px; font-weight: 900; color: var(--evogreen); }
+        .roi-badge { font-size: 9px; background: rgba(34, 197, 94, 0.2); color: var(--evogreen); padding: 2px 6px; border-radius: 4px; font-weight: bold; }
+        .actions { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 15px; }
+        .btn-f { padding: 14px; border: none; border-radius: 10px; color: white; font-weight: bold; cursor: pointer; font-size: 11px; text-transform: uppercase; }
+        .btn-pdf-ws { background: #16a34a; grid-column: span 2; font-size: 13px; }
+    </style>
+</head>
+<body>
+
+<div class="ui-container">
+    <div style="text-align:center; margin-bottom:20px;">
+        <img src="https://evobike.com.mx/cdn/shop/files/logo_600x.png?v=1614333552" width="150">
+    </div>
+    
+    <label>Información del Cliente y Asesor</label>
+    <input type="text" id="asesor" placeholder="Nombre del Asesor EvoBike">
+    <input type="text" id="cliente" placeholder="Nombre del Cliente / Empresa">
+    <input type="number" id="telefono" placeholder="WhatsApp (10 dígitos)">
+    
+    <label>Nivel de Precios</label>
+    <div class="lvl-btns">
+        <div class="lvl-btn active" id="b-p" onclick="setLvl('p')">PÚBLICO</div>
+        <div class="lvl-btn" id="b-m" onclick="setLvl('m')">MAYORISTA</div>
+        <div class="lvl-btn" id="b-d" onclick="setLvl('d')">DISTRIBUIDOR</div>
+    </div>
+
+    <div class="add-box">
+        <label>Producto</label>
+        <select id="prod-select"></select>
+        <div style="display:flex; gap:10px;">
+            <input type="text" id="p-color" placeholder="Color" style="flex:2">
+            <input type="number" id="p-cant" value="1" min="1" style="flex:1">
+        </div>
+        <button class="btn-add" onclick="agregar()">+ AÑADIR A COTIZACIÓN</button>
+    </div>
+
+    <table class="cart-table">
+        <tbody id="lista-previa"></tbody>
+    </table>
+
+    <div id="profit-panel" class="profit-panel" style="display:none;">
+        <div class="profit-grid">
+            <div>
+                <label style="color:rgba(255,255,255,0.6); margin:0;">INVERSIÓN NETO</label>
+                <div id="total-inv" class="profit-val" style="color:white;">$0.00</div>
+            </div>
+            <div style="text-align:right;">
+                <label style="color:rgba(255,255,255,0.6); margin:0;">GANANCIA ESTIMADA</label>
+                <div id="total-profit" class="profit-val">$0.00</div>
+            </div>
+        </div>
+        <div style="margin-top:10px; padding-top:10px; border-top:1px solid rgba(255,255,255,0.1); display:flex; justify-content:space-between; align-items:center;">
+            <span style="font-size:10px; opacity:0.8;">RETORNO PROM. (ROI)</span>
+            <span id="avg-roi" class="roi-badge">0%</span>
+        </div>
+    </div>
+
+    <div class="actions">
+        <button class="btn-f btn-pdf-ws" onclick="procesarEnvio()">📄 DESCARGAR PDF Y ENVIAR WA</button>
+        <button class="btn-f" onclick="descargarExcel()" style="background:#2563eb;">📊 EXCEL</button>
+        <button class="btn-f" onclick="limpiarTodo()" style="background:#94a3b8;">🗑️ LIMPIAR</button>
+    </div>
+</div>
+
+<script>
+    const LOGO_URL = "https://evobike.com.mx/cdn/shop/files/logo_600x.png?v=1614333552";
+    let carrito = [], nivel = 'p';
+
+    const db = [
+        {id:1, n:"Ricochet", d:9139, m:10505, p:12599, roi:27.46, cat:'urban', v:'60V'},
+        {id:2, n:"Python", d:9294, m:10683, p:12799, roi:27.38, cat:'urban', v:'60V'},
+        {id:3, n:"Foxy", d:6521, m:7495, p:8399, roi:22.37, cat:'urban', v:'48V'},
+        {id:4, n:"Cross Kid", d:5589, m:6424, p:7199, roi:22.36, cat:'urban', v:'48V'},
+        {id:5, n:"REINA 60V", d:11000, m:12644, p:14899, roi:26.17, cat:'deportiva', v:'60V'},
+        {id:6, n:"REINA 72V", d:11500, m:13218, p:15999, roi:28.12, cat:'deportiva', v:'72V'},
+        {id:7, n:"Eclipce 60V", d:11200, m:12874, p:15099, roi:25.82, cat:'deportiva', v:'60V'},
+        {id:8, n:"Eclipce 72V", d:11700, m:13448, p:16299, roi:28.22, cat:'deportiva', v:'72V'},
+        {id:9, n:"AURORA 60V", d:11650, m:13391, p:15699, roi:25.79, cat:'deportiva', v:'60V'},
+        {id:10, n:"AURORA 72V", d:12150, m:13966, p:16899, roi:28.10, cat:'deportiva', v:'72V'},
+        {id:11, n:"JAGUAR 60V", d:11700, m:13448, p:15799, roi:25.94, cat:'deportiva', v:'60V'},
+        {id:12, n:"JAGUAR 72V", d:12200, m:14023, p:16999, roi:28.23, cat:'deportiva', v:'72V'},
+        {id:13, n:"TIGRE 60V", d:13100, m:15057, p:18699, roi:29.94, cat:'trabajo', v:'60V'},
+        {id:14, n:"Urbex 60V", d:13100, m:15057, p:18699, roi:29.94, cat:'trabajo', v:'60V'},
+        {id:15, n:"Lumo 48V", d:7600, m:8736, p:9799, roi:22.44, cat:'urban', v:'48V'},
+        {id:16, n:"Lumo 60V", d:8100, m:9310, p:10399, roi:22.11, cat:'urban', v:'60V'},
+        {id:17, n:"VMP S6 48/12V", d:6500, m:7471, p:7899, roi:17.71, cat:'urban', v:'48V'},
+        {id:18, n:"S6 48/20V", d:7000, m:8046, p:8499, roi:17.64, cat:'urban', v:'48V'},
+        {id:19, n:"VMP S5 48/12V", d:6150, m:7069, p:7499, roi:17.99, cat:'urban', v:'48V'},
+        {id:20, n:"S5 48/20V", d:6650, m:7644, p:8099, roi:17.89, cat:'urban', v:'48V'},
+        {id:21, n:"SOL 48V", d:7300, m:8391, p:9399, roi:22.33, cat:'urban', v:'48V'},
+        {id:22, n:"SOL 60V", d:7800, m:8966, p:10099, roi:22.76, cat:'urban', v:'60V'},
+        {id:23, n:"SOL PRO 48V", d:7450, m:8563, p:9299, roi:19.88, cat:'urban', v:'48V'},
+        {id:24, n:"COLORITA 48V", d:8500, m:9770, p:10999, roi:22.72, cat:'urban', v:'48V'},
+        {id:25, n:"COLORITA 60V", d:9000, m:10345, p:11599, roi:22.41, cat:'urban', v:'60V'},
+        {id:26, n:"GALAXY 48V", d:8200, m:9425, p:10699, roi:23.36, cat:'urban', v:'48V'},
+        {id:27, n:"GALAXY 60V", d:8700, m:10000, p:11299, roi:23.00, cat:'urban', v:'60V'},
+        {id:28, n:"MOPED 48V", d:10500, m:12069, p:14599, roi:28.08, cat:'moped', v:'48V'},
+        {id:29, n:"MOPED 60V", d:11000, m:12644, p:15299, roi:28.10, cat:'moped', v:'60V'},
+        {id:30, n:"URBAN PLUS 60V", d:11500, m:13218, p:15999, roi:28.12, cat:'urban', v:'60V'},
+        {id:31, n:"URBAN PLUS 72V", d:12000, m:13793, p:16699, roi:28.14, cat:'urban', v:'72V'},
+        {id:32, n:"RAYO 60V", d:9700, m:11149, p:13099, roi:25.95, cat:'deportiva', v:'60V'},
+        {id:33, n:"RAYO 72V", d:10200, m:11724, p:13799, roi:26.08, cat:'deportiva', v:'72V'},
+        {id:34, n:"RAYO PRO 60V", d:10550, m:12126, p:14199, roi:25.70, cat:'deportiva', v:'60V'},
+        {id:35, n:"RAYO PRO 72V", d:11050, m:12701, p:14899, roi:25.83, cat:'deportiva', v:'72V'},
+        {id:36, n:"GALAXY PLUS 60V", d:10550, m:12126, p:14199, roi:25.70, cat:'urban', v:'60V'},
+        {id:37, n:"GALAXY PLUS 72V", d:11050, m:12701, p:14899, roi:25.83, cat:'urban', v:'72V'},
+        {id:38, n:"TAURO 48V", d:10600, m:12184, p:14599, roi:27.39, cat:'urban', v:'48V'},
+        {id:39, n:"TAURO 60V", d:11100, m:12759, p:15299, roi:27.45, cat:'urban', v:'60V'},
+        {id:40, n:"AGUILA PRO 60V", d:12100, m:13908, p:16299, roi:25.76, cat:'deportiva', v:'60V'},
+        {id:41, n:"AGUILA PRO 72V", d:12600, m:14483, p:16999, roi:25.88, cat:'deportiva', v:'72V'},
+        {id:42, n:"Ryder pro 60V", d:12900, m:14828, p:16699, roi:22.75, cat:'deportiva', v:'60V'},
+        {id:43, n:"Ryder pro 72V", d:13400, m:15402, p:17399, roi:22.98, cat:'deportiva', v:'72V'},
+        {id:44, n:"LEO 60V", d:11000, m:12644, p:14899, roi:26.17, cat:'urban', v:'60V'},
+        {id:45, n:"LEO 72V", d:11500, m:13218, p:15499, roi:25.80, cat:'urban', v:'72V'},
+        {id:46, n:"POLAR 60V", d:11700, m:13448, p:15799, roi:25.94, cat:'urban', v:'60V'},
+        {id:47, n:"POLAR 72V", d:12800, m:14713, p:17299, roi:26.01, cat:'urban', v:'72V'},
+        {id:48, n:"ZEUZ 60V", d:13300, m:15287, p:18399, roi:27.71, cat:'deportiva', v:'60V'},
+        {id:49, n:"ZEUZ 72V", d:13800, m:15862, p:18999, roi:27.36, cat:'deportiva', v:'72V'},
+        {id:50, n:"ZEUZ 60V C/ASIENTO", d:13997, m:16089, p:19299, roi:27.47, cat:'deportiva', v:'60V'},
+        {id:51, n:"ZEUZ 72V C/ASIENTO", d:14497, m:16663, p:19999, roi:27.51, cat:'deportiva', v:'72V'},
+        {id:52, n:"BEETLE 48V", d:12700, m:14598, p:17099, roi:25.73, cat:'urban', v:'48V'},
+        {id:53, n:"BEETLE 60V", d:13200, m:15172, p:17799, roi:25.84, cat:'urban', v:'60V'},
+        {id:54, n:"FAMILY 48V", d:11999, m:13792, p:16199, roi:25.93, cat:'family', v:'48V'},
+        {id:55, n:"FAMILY 60V", d:12499, m:14367, p:16899, roi:26.04, cat:'family', v:'60V'},
+        {id:56, n:"FAMILY PLUS 60V", d:17200, m:19770, p:23199, roi:25.86, cat:'family', v:'60V'},
+        {id:57, n:"FAMILY PLUS 72V", d:17700, m:20345, p:23899, roi:25.94, cat:'family', v:'72V'},
+        {id:58, n:"FAMILY Q 48V", d:12700, m:14598, p:17499, roi:27.42, cat:'family', v:'48V'},
+        {id:59, n:"FAMILY Q 60V", d:13200, m:15172, p:18199, roi:27.47, cat:'family', v:'60V'},
+        {id:60, n:"FAMILY PLUS Q 60V", d:16999, m:19539, p:23499, roi:27.66, cat:'family', v:'60V'},
+        {id:61, n:"FAMILY PLUS Q 72V", d:17499, m:20114, p:24099, roi:27.39, cat:'family', v:'72V'},
+        {id:62, n:"GOLF 60V", d:17800, m:20460, p:23999, roi:25.83, cat:'family', v:'60V'},
+        {id:63, n:"GOLF 72V", d:18300, m:21034, p:24699, roi:25.91, cat:'family', v:'72V'},
+        {id:64, n:"GOLF PLUS 60V", d:22500, m:25862, p:31099, roi:27.65, cat:'family', v:'60V'},
+        {id:65, n:"GOLF PLUS 72V", d:23000, m:26437, p:31699, roi:27.44, cat:'family', v:'72V'},
+        {id:66, n:"SOLARA 72V", d:25500, m:29310, p:35199, roi:27.55, cat:'family', v:'72V'},
+        {id:67, n:"CARGO 110CM 60V", d:20000, m:22989, p:27599, roi:27.53, cat:'carga', v:'60V'},
+        {id:68, n:"TANK 160CM 60V 45Ah", d:30000, m:34483, p:40499, roi:25.92, cat:'carga', v:'60V'},
+        {id:69, n:"TANK 160CM 60V 52Ah", d:30621, m:35197, p:41299, roi:25.86, cat:'carga', v:'60V'},
+        {id:70, n:"TANK 160CM 72V 45Ah", d:30931, m:35553, p:42399, roi:27.05, cat:'carga', v:'72V'},
+        {id:71, n:"TANK 160CM 72V 52Ah", d:31242, m:35910, p:42799, roi:27.00, cat:'carga', v:'72V'},
+        {id:72, n:"TANK 180CM 60V 45Ah", d:36000, m:41379, p:48599, roi:25.92, cat:'carga', v:'60V'},
+        {id:73, n:"TANK 180CM 60V 52Ah", d:36517, m:41974, p:49299, roi:25.93, cat:'carga', v:'60V'},
+        {id:74, n:"TANK 180CM 72V 45Ah", d:37035, m:42569, p:49999, roi:25.93, cat:'carga', v:'72V'},
+        {id:75, n:"TANK 180CM 72V 52Ah", d:37656, m:43283, p:50799, roi:25.87, cat:'carga', v:'72V'}
+    ];
+
+    function init() {
+        const select = document.getElementById('prod-select');
+        select.innerHTML = db.map((p, i) => `<option value="${i}">${p.n} - ${p.v}</option>`).join('');
+    }
+
+    function setLvl(l) {
+        nivel = l;
+        document.querySelectorAll('.lvl-btn').forEach(b => b.classList.remove('active'));
+        document.getElementById('b-'+l).classList.add('active');
+        carrito.forEach(item => {
+            const original = db.find(x => x.n === item.modelo);
+            item.precio = original[nivel];
+            item.total = item.precio * item.cant;
+            item.profit = (original.p - item.precio) * item.cant;
+        });
+        actualizarVista();
+    }
+
+    window.addEventListener('keydown', async (e) => {
+        if (e.ctrlKey && e.key.toLowerCase() === 'm') {
+            e.preventDefault();
+            const { value: cap } = await Swal.fire({ title:'Capital para Margen Max', input:'number', showCancelButton:true });
+            if(cap) autoFill('margen', cap);
+        }
+        if (e.ctrlKey && e.key.toLowerCase() === 'a') {
+            e.preventDefault();
+            const { value: cap } = await Swal.fire({ title:'Capital para Mix Stock', input:'number', showCancelButton:true });
+            if(cap) autoFill('mix', cap);
+        }
+    });
+
+    function autoFill(modo, capital) {
+        carrito = [];
+        let restante = parseFloat(capital);
+        if(modo === 'margen'){
+            const sorted = [...db].sort((a,b) => b.roi - a.roi);
+            sorted.forEach(p => { while(restante >= p[nivel]){ agregarSilencioso(p); restante -= p[nivel]; } });
+        } else {
+            const cats = ['carga', 'trabajo', 'moped', 'urban', 'deportiva'];
+            let loop = true;
+            while(loop){
+                loop = false;
+                for(let c of cats){
+                    const p = db.filter(i => i.cat === c).sort((a,b) => b.roi - a.roi)[0];
+                    if(p && restante >= p[nivel]){ agregarSilencioso(p); restante -= p[nivel]; loop = true; }
+                }
+            }
+        }
+        actualizarVista();
+    }
+
+    function agregarSilencioso(p) {
+        const ex = carrito.find(x => x.modelo === p.n);
+        if(ex){ ex.cant++; ex.total = ex.precio * ex.cant; ex.profit = (p.p - ex.precio) * ex.cant; }
+        else { carrito.push({ modelo:p.n, voltaje:p.v, color:'MIX', cant:1, precio:p[nivel], total:p[nivel], profit: (p.p - p[nivel]), roi: p.roi }); }
+    }
+
+    function agregar() {
+        const i = document.getElementById('prod-select').value;
+        const p = db[i];
+        const cant = parseInt(document.getElementById('p-cant').value);
+        carrito.push({
+            modelo: p.n, voltaje: p.v, color: (document.getElementById('p-color').value || 'POR DEFINIR').toUpperCase(),
+            cant: cant, precio: p[nivel], total: p[nivel] * cant,
+            profit: (p.p - p[nivel]) * cant, roi: p.roi
+        });
+        actualizarVista();
+    }
+
+    function quitarItem(idx) { carrito.splice(idx,1); actualizarVista(); }
+    function limpiarTodo() { carrito = []; actualizarVista(); }
+
+    function actualizarVista() {
+        const t = document.getElementById('lista-previa');
+        const pnl = document.getElementById('profit-panel');
+        if(carrito.length > 0) pnl.style.display = 'block'; else pnl.style.display = 'none';
+
+        t.innerHTML = carrito.map((it, idx) => `
+            <tr>
+                <td><b>${it.cant}</b></td>
+                <td>${it.modelo}<br><small style="color:#94a3b8">${it.color}</small></td>
+                <td style="text-align:right"><b>$${it.total.toLocaleString()}</b><br><small style="color:var(--evogreen)">+$${it.profit.toLocaleString()}</small></td>
+                <td><button class="btn-del" onclick="quitarItem(${idx})">×</button></td>
+            </tr>
+        `).join('');
+
+        const inv = carrito.reduce((s,i) => s + i.total, 0);
+        const gain = carrito.reduce((s,i) => s + i.profit, 0);
+        document.getElementById('total-inv').innerText = `$${inv.toLocaleString()}`;
+        document.getElementById('total-profit').innerText = `$${gain.toLocaleString()}`;
+        document.getElementById('avg-roi').innerText = inv > 0 ? `${((gain/inv)*100).toFixed(1)}% ROI` : '0%';
+    }
+
+    function generarPDF() {
+        const { jsPDF } = window.jspdf;
+        const doc = new jsPDF('p', 'pt', 'letter');
+        const cli = (document.getElementById('cliente').value || "CLIENTE GENERAL").toUpperCase();
+        const ase = (document.getElementById('asesor').value || "ASESOR").toUpperCase();
+
+        doc.addImage(LOGO_URL, 'PNG', 40, 40, 120, 45);
+        doc.setFontSize(18); doc.setTextColor(34, 197, 94); doc.setFont(undefined, 'bold');
+        doc.text("PROPUESTA DE NEGOCIO", 570, 70, {align:'right'});
+        
+        doc.setFontSize(9); doc.setTextColor(100); doc.setFont(undefined, 'normal');
+        doc.text(`PARA: ${cli}`, 40, 110);
+        doc.text(`ASESOR: ${ase}`, 40, 122);
+        doc.text(`FECHA: ${new Date().toLocaleDateString()}`, 570, 110, {align:'right'});
+
+        const body = carrito.map(i => [i.cant, i.modelo, i.color, `$${i.precio.toLocaleString()}`, `$${i.total.toLocaleString()}`, `${i.roi}%`]);
+
+        doc.autoTable({
+            startY: 140,
+            head: [['CANT', 'MODELO', 'COLOR', 'COSTO UNIT', 'SUBTOTAL', 'ROI']],
+            body: body,
+            theme: 'grid',
+            headStyles: { fillColor: [34, 197, 94] },
+            styles: { fontSize: 8 },
+            columnStyles: { 3: {halign:'right'}, 4: {halign:'right'}, 5: {halign:'center'} }
+        });
+
+        let fy = doc.lastAutoTable.finalY + 30;
+        const inv = carrito.reduce((s,i) => s + i.total, 0);
+        const gain = carrito.reduce((s,i) => s + i.profit, 0);
+
+        doc.setFillColor(15, 23, 42); doc.rect(350, fy, 220, 80, 'F');
+        doc.setTextColor(255); doc.setFontSize(10);
+        doc.text("INVERSIÓN TOTAL:", 365, fy + 25);
+        doc.text(`$${inv.toLocaleString()} MXN`, 555, fy + 25, {align:'right'});
+        doc.setTextColor(34, 197, 94); doc.setFont(undefined, 'bold');
+        doc.text("GANANCIA ESTIMADA:", 365, fy + 50);
+        doc.text(`$${gain.toLocaleString()} MXN`, 555, fy + 50, {align:'right'});
+        doc.setFontSize(8); doc.setTextColor(255); doc.setFont(undefined, 'normal');
+        doc.text(`RENTABILIDAD PROMEDIO: ${((gain/inv)*100).toFixed(1)}%`, 365, fy + 70);
+
+        // PIE DE PÁGINA (LEGALES)
+        doc.setFontSize(8); doc.setTextColor(80); doc.setFont(undefined, 'bold');
+        doc.text("MÉTODOS DE PAGO:", 40, 730);
+        doc.setFont(undefined, 'normal');
+        doc.text("Transferencia SPEI, Depósito Bancario, Pago en efectivo", 40, 742);
+        doc.setFontSize(7); doc.setTextColor(120);
+        doc.text("Precios y disponibilidad sujetos a cambios sin previo aviso. Esta cotizacion NO garantiza la reserva de inventario", 40, 760);
+        doc.text("hasta la confirmacion de pago correspondiente.", 40, 770);
+
+        doc.save(`Propuesta_EvoBike_${cli.replace(/\s+/g, '_')}.pdf`);
+    }
+
+    function procesarEnvio() {
+        const tel = document.getElementById('telefono').value;
+        if(!tel || tel.length < 10) return Swal.fire("Error", "WhatsApp a 10 dígitos", "error");
+        generarPDF();
+        setTimeout(() => {
+            window.open(`https://wa.me/52${tel}?text=Hola, te envío tu propuesta de inversión EvoBike que acabamos de generar.`, '_blank');
+        }, 1000);
+    }
+
+    function descargarExcel() {
+        const data = carrito.map(i => ({ Modelo: i.modelo, Cant: i.cant, Inversion: i.total, Ganancia: i.profit }));
+        const ws = XLSX.utils.json_to_sheet(data);
+        const wb = XLSX.utils.book_new();
+        XLSX.utils.book_append_sheet(wb, ws, "Cotizacion");
+        XLSX.writeFile(wb, `EvoBike_Staff.xlsx`);
+    }
+
+    init();
+</script>
+</body>
+</html>
